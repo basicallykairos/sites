@@ -91,14 +91,26 @@ async function chamar(corpo) {
   return j;
 }
 
+let vistos = 0; // mensagens do servidor já mostradas
 async function iniciar() {
   bolha({ autor: 'ia', texto: BOAS_VINDAS });
   if (!TOKEN) return;
   try {
     const j = await chamar({ acao: 'historico' });
     (j.mensagens || []).forEach(bolha);
+    vistos = (j.mensagens || []).length;
   } catch (e) { /* sem conexão: segue só com a boas-vindas */ }
 }
+// busca novidades (ex.: prévia pronta) sem chamar a IA; para depois de 40 min aberto
+const inicioPagina = Date.now();
+setInterval(async () => {
+  if (!TOKEN || ocupado || document.hidden || Date.now() - inicioPagina > 40 * 60000) return;
+  try {
+    const j = await chamar({ acao: 'historico' });
+    const ms = j.mensagens || [];
+    if (ms.length > vistos) { ms.slice(vistos).filter(m => m.autor !== 'cliente').forEach(bolha); vistos = ms.length; }
+  } catch (e) {}
+}, 20000);
 
 function reduzir(file) {
   return new Promise((ok, erro) => {
@@ -137,6 +149,7 @@ document.getElementById('f').onsubmit = async (e) => {
     const j = await chamar({ acao: 'mensagem', texto, imagens: envio });
     dig.remove();
     (j.mensagens || []).forEach(bolha);
+    if (j.ok) vistos += 2; // cliente + resposta gravadas no servidor
     if (j.erro) bolha({ autor: 'ia', texto: j.erro });
   } catch (x) {
     dig.remove();
